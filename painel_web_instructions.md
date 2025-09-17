@@ -290,9 +290,6 @@ yarn add framer-motion @types/leaflet leaflet.heat
 yarn add -D @types/react-leaflet
 
 # Configurar ambiente
-cp .env.example .env.local
-# API local: NEXT_PUBLIC_API_URL=http://localhost:6060/api/v1
-# API em Docker: NEXT_PUBLIC_API_URL=http://189.90.44.226:6060/api/v1
-```
+
 
 Lembre-se: Este painel representa a transparência da gestão pública. Cada pixel deve transmitir confiança e clareza!
