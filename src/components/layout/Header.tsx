@@ -1,10 +1,27 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import client from "@/lib/api/client";
 
 export default function Header() {
   const [open, setOpen] = useState(false);
+  const router = useRouter();
+
+  // autocomplete state
+  const [q, setQ] = useState("");
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(-1);
+  const debRef = useRef<number | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (debRef.current) window.clearTimeout(debRef.current);
+    };
+  }, []);
 
   return (
     <header className="bg-white border-b shadow-sm">
@@ -49,11 +66,128 @@ export default function Header() {
         <div className="flex items-center gap-3">
           <div className="hidden md:flex items-center bg-gray-100 rounded-full px-3 py-1 text-sm text-gray-600">
             <i className="bi bi-search mr-2" aria-hidden />
-            <input
-              aria-label="Pesquisar"
-              placeholder="Pesquisar bairro, rua..."
-              className="bg-transparent outline-none text-sm"
-            />
+            <div className="relative">
+              <input
+                ref={inputRef}
+                aria-label="Pesquisar"
+                placeholder="Pesquisar bairro, rua..."
+                className="bg-transparent outline-none text-sm w-64"
+                value={q}
+                onChange={(e) => {
+                  setQ(e.target.value);
+                  setActiveIndex(-1);
+                  if (debRef.current) window.clearTimeout(debRef.current);
+                  const v = e.target.value;
+                  if (!v || v.length < 2) {
+                    setSuggestions([]);
+                    return;
+                  }
+                  debRef.current = window.setTimeout(async () => {
+                    setLoading(true);
+                    try {
+                      const res = await client.get("/search/autocomplete", {
+                        params: { q: v, type: "all", limit: 8 },
+                      });
+
+                      // Normalize different possible payload shapes.
+                      // Example payload reported by API:
+                      // { success: true, statuscode: 200, data: { items: [{ type, text, value }] } }
+                      const body = res.data ?? res;
+                      let candidates: unknown[] = [];
+
+                      if (body && typeof body === "object") {
+                        const obj = body as Record<string, unknown>;
+                        if (obj.data && typeof obj.data === "object") {
+                          const d = obj.data as Record<string, unknown>;
+                          if (Array.isArray(d.items))
+                            candidates = d.items as unknown[];
+                        }
+
+                        if (!candidates.length && Array.isArray(obj.items))
+                          candidates = obj.items as unknown[];
+                        if (
+                          !candidates.length &&
+                          Array.isArray(obj.suggestions)
+                        )
+                          candidates = obj.suggestions as unknown[];
+                        if (!candidates.length && Array.isArray(body))
+                          candidates = body as unknown[];
+                      }
+
+                      const normalized = candidates
+                        .map((it) => {
+                          if (typeof it === "string") return it;
+                          if (it && typeof it === "object") {
+                            const o = it as Record<string, unknown>;
+                            return String(o.value ?? o.text ?? "");
+                          }
+                          return String(it ?? "");
+                        })
+                        .filter((s) => typeof s === "string" && s.length > 0);
+
+                      setSuggestions(normalized.slice(0, 8));
+                    } catch {
+                      setSuggestions([]);
+                    } finally {
+                      setLoading(false);
+                    }
+                  }, 220);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "ArrowDown") {
+                    setActiveIndex((i) =>
+                      Math.min(i + 1, suggestions.length - 1)
+                    );
+                  } else if (e.key === "ArrowUp") {
+                    setActiveIndex((i) => Math.max(i - 1, 0));
+                  } else if (e.key === "Enter") {
+                    const pick =
+                      activeIndex >= 0 ? suggestions[activeIndex] : q;
+                    if (pick) {
+                      setQ(pick);
+                      setSuggestions([]);
+                      setActiveIndex(-1);
+                      router.push(
+                        `/estatisticas?q=${encodeURIComponent(pick)}`
+                      );
+                    }
+                  }
+                }}
+              />
+
+              {/* dropdown */}
+              {((suggestions && suggestions.length > 0) || loading) && (
+                <div className="absolute left-0 mt-1 w-64 bg-white border rounded shadow z-50">
+                  {loading ? (
+                    <div className="p-2 text-sm text-gray-500">
+                      Carregando...
+                    </div>
+                  ) : (
+                    suggestions.map((s, idx) => (
+                      <div
+                        key={s + idx}
+                        className={`px-3 py-2 text-sm cursor-pointer hover:bg-gray-100 ${
+                          idx === activeIndex ? "bg-gray-100" : ""
+                        }`}
+                        onMouseDown={() => {
+                          // use onMouseDown to prevent blur before click
+                          // clear suggestions immediately so dropdown hides
+                          setQ(String(s));
+                          setSuggestions([]);
+                          setActiveIndex(-1);
+                          router.push(
+                            `/estatisticas?q=${encodeURIComponent(String(s))}`
+                          );
+                        }}
+                        onMouseEnter={() => setActiveIndex(idx)}
+                      >
+                        {s}
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
           </div>
 
           <Link

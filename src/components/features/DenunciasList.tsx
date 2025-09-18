@@ -1,39 +1,33 @@
 import DenunciaCard from "@/components/features/DenunciaCard";
 
 import type { Denuncia } from "@/components/features/DenunciaCard";
+import React from "react";
 
-const denuncias: Denuncia[] = [
-  {
-    id: 1,
-    titulo: "Buraco na Rua A",
-    descricao: "Buraco grande próximo ao cruzamento.",
-    status: "pendente",
-    bairro: "Centro",
-    data: "2025-09-10",
-  },
-  {
-    id: 2,
-    titulo: "Lixo acumulado",
-    descricao: "Lixo não recolhido há 3 dias.",
-    status: "resolvida",
-    bairro: "Nova Imperatriz",
-    data: "2025-09-12",
-  },
-  {
-    id: 3,
-    titulo: "Iluminação pública apagada",
-    descricao: "Poste sem luz na esquina.",
-    status: "em andamento",
-    bairro: "Bacuri",
-    data: "2025-09-14",
-  },
-];
+export default function DenunciasList({
+  items = [],
+  loading = false,
+}: {
+  items?: Denuncia[];
+  loading?: boolean;
+}) {
+  if (loading)
+    return (
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <div key={i} className="animate-pulse bg-white rounded-lg p-4 h-36" />
+        ))}
+      </div>
+    );
 
-export default function DenunciasList() {
+  if ((items ?? []).length === 0)
+    return (
+      <div className="text-sm text-gray-500">Nenhuma denúncia encontrada.</div>
+    );
+
   return (
     <section>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-        {denuncias.map((denuncia) => (
+        {(items ?? []).map((denuncia) => (
           <DenunciaCard key={denuncia.id} denuncia={denuncia} />
         ))}
       </div>

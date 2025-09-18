@@ -100,7 +100,7 @@ export default function HeatmapContainer({
   const center: [number, number] = [-5.514639, -47.472239];
 
   const baseVisualization = useMemo(() => {
-    if (zoom >= 14) return "markers";
+    if (zoom >= 13) return "markers";
     if (zoom >= 11) return "clusters";
     return "heatmap";
   }, [zoom]);
