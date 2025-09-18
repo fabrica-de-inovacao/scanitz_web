@@ -43,6 +43,8 @@ const MapControls = dynamic(() => import("./MapControls"), {
 }) as unknown as React.ComponentType<{
   filters: MapFiltersLocal;
   onFiltersChange: React.Dispatch<React.SetStateAction<MapFiltersLocal>>;
+  onBasemapChange?: (b: "osm" | "sat") => void;
+  currentBasemap?: "osm" | "sat";
   visualizationType: "heatmap" | "clusters" | "markers";
   className?: string;
 }>;
@@ -56,21 +58,25 @@ const MapLegend = dynamic(() => import("./MapLegend"), {
 import { MapContainer, TileLayer, useMap } from "react-leaflet";
 import { useRef, useEffect } from "react";
 import type { Map as LeafletMap } from "leaflet";
+import L from "leaflet";
 
 interface HeatmapContainerProps {
   height?: string;
   showControls?: boolean;
   initialZoom?: number;
   className?: string;
+  controlsPosition?: "left" | "right";
 }
 
 export default function HeatmapContainer({
   height = "h-96",
   showControls = true,
-  initialZoom = 12,
+  initialZoom = 13,
   className = "",
+  controlsPosition = "right",
 }: HeatmapContainerProps) {
   const [zoom, setZoom] = useState(initialZoom);
+  const [basemap, setBasemap] = useState<"osm" | "sat">("osm");
   const [filters, setFilters] = useState<MapFiltersLocal>({
     status: "all",
     bounds: null,
@@ -91,13 +97,18 @@ export default function HeatmapContainer({
     summary?: Record<string, unknown>;
   };
 
-  const center: [number, number] = [-5.5292, -47.4622];
+  const center: [number, number] = [-5.514639, -47.472239];
 
-  const visualizationType = useMemo(() => {
+  const baseVisualization = useMemo(() => {
     if (zoom >= 14) return "markers";
     if (zoom >= 11) return "clusters";
     return "heatmap";
   }, [zoom]);
+
+  // allow explicit override via filters.view
+  const visualizationType = (filters.view as "heatmap" | "clusters" | "markers")
+    ? (filters.view as "heatmap" | "clusters" | "markers")
+    : baseVisualization;
 
   // Local component to sync zoom state using react-leaflet hooks
   function MapZoomSync({ onChange }: { onChange: (z: number) => void }) {
@@ -108,6 +119,15 @@ export default function HeatmapContainer({
       map.on("zoomend", handler);
       return () => void map.off("zoomend", handler);
     }, [map, onChange]);
+    return null;
+  }
+
+  // MapRefSetter - attach map instance to mapRef via useMap
+  function MapRefSetter() {
+    const map = useMap();
+    useEffect(() => {
+      mapRef.current = map as unknown as LeafletMap;
+    }, [map]);
     return null;
   }
 
@@ -127,14 +147,22 @@ export default function HeatmapContainer({
         zoom={initialZoom}
         style={{ height: "100%", width: "100%" }}
         className="rounded-lg shadow-lg"
-        ref={mapRef}
         zoomControl={true}
         attributionControl={false}
       >
+        <MapRefSetter />
         <MapZoomSync onChange={setZoom} />
         <TileLayer
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+          url={
+            basemap === "osm"
+              ? "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+              : "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png"
+          }
+          attribution={
+            basemap === "osm"
+              ? '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+              : '&copy; <a href="https://opentopomap.org">OpenTopoMap</a>'
+          }
         />
 
         {visualizationType === "heatmap" && (
@@ -143,13 +171,40 @@ export default function HeatmapContainer({
         {visualizationType === "clusters" && (
           <ClusterLayer
             clusters={heatData.clusters || []}
-            onClusterClick={() => {}}
+            onClusterClick={(c) => {
+              // zoom to cluster
+              const m = mapRef.current;
+              if (!m) return;
+              const targetZoom = Math.min((m.getZoom() ?? 12) + 2, 18);
+              m.setView([c.lat, c.lng], targetZoom, { animate: true });
+            }}
           />
         )}
         {visualizationType === "markers" && (
           <MarkerLayer
             points={heatData.points || []}
-            onMarkerClick={() => {}}
+            onMarkerClick={(p) => {
+              const m = mapRef.current;
+              if (!m) return;
+              m.setView([p.lat, p.lng], Math.max(14, m.getZoom() ?? 14), {
+                animate: true,
+              });
+
+              // open a temporary popup using Leaflet directly
+              try {
+                const title = (p as { title?: string }).title ?? "Denúncia";
+                const description =
+                  (p as { description?: string }).description ?? "";
+                const popup = L.popup({ maxWidth: 300 })
+                  .setLatLng([p.lat, p.lng])
+                  .setContent(
+                    `<div class="min-w-[200px]"><h3 class="font-semibold">${title}</h3><p class="text-sm text-gray-600">${description}</p></div>`
+                  );
+                popup.openOn(m);
+              } catch {
+                // ignore popup errors
+              }
+            }}
           />
         )}
       </MapContainer>
@@ -159,16 +214,38 @@ export default function HeatmapContainer({
 
       {showControls && (
         <>
-          <div className="absolute top-4 left-4 z-[1000]">
+          <div
+            className={`absolute top-4 ${
+              controlsPosition === "left" ? "left-4" : "right-4"
+            } z-[1000]`}
+          >
             <MapControls
               filters={filters}
               onFiltersChange={setFilters}
+              onBasemapChange={(b) => setBasemap(b)}
+              currentBasemap={basemap}
               visualizationType={visualizationType}
+              className={
+                controlsPosition === "left"
+                  ? "origin-top-left"
+                  : "origin-top-right"
+              }
             />
           </div>
 
-          <div className="absolute bottom-4 right-4 z-[1000]">
-            <MapLegend data={heatData.summary} />
+          <div
+            className={`absolute bottom-4 ${
+              controlsPosition === "left" ? "left-4" : "right-4"
+            } z-[1000]`}
+          >
+            <MapLegend
+              data={heatData.summary}
+              className={
+                controlsPosition === "left"
+                  ? "origin-bottom-left"
+                  : "origin-bottom-right"
+              }
+            />
           </div>
         </>
       )}

@@ -295,7 +295,7 @@ export default function DashboardClient() {
             <div className="bg-white rounded-xl shadow p-4">
               <h3 className="text-lg font-semibold mb-3">Mapa de Incidência</h3>
               <div className="h-80">
-                <HeatmapContainer initialZoom={12} height="h-full" />
+                <HeatmapContainer initialZoom={13} height="h-full" />
               </div>
             </div>
 
