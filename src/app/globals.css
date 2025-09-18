@@ -10,6 +10,15 @@
   --app-bg: #f8fafc; /* very light background */
 }
 
+/* utility to hide native scrollbars (used by Carousel) */
+.hide-scrollbar {
+  -ms-overflow-style: none; /* IE and Edge */
+  scrollbar-width: none; /* Firefox */
+}
+.hide-scrollbar::-webkit-scrollbar {
+  display: none; /* Safari and Chrome */
+}
+
 html,
 body,
 #__next {

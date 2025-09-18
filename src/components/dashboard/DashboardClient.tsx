@@ -3,6 +3,7 @@
 import KPICard from "@/components/ui/KPICard";
 import Button from "@/components/ui/Button";
 import ActivityList from "@/components/ui/ActivityList";
+import Carousel from "@/components/ui/Carousel";
 import dynamic from "next/dynamic";
 import { useDashboardKPIs } from "@/lib/hooks/useComplaints";
 import type { NormalizedDashboard } from "@/lib/hooks/useComplaints";
@@ -30,6 +31,7 @@ export default function DashboardClient() {
     trend?: "up" | "down" | "stable";
     sublabel?: string;
     lastUpdated?: string | Date;
+    progress?: number | null;
   };
 
   let kpis: KPIItem[] = [];
@@ -47,15 +49,26 @@ export default function DashboardClient() {
     return cur;
   };
 
+  const formatNumber = (v: unknown) => {
+    if (v == null) return "—";
+    if (typeof v === "number") return v.toLocaleString("pt-BR");
+    if (typeof v === "string" && !isNaN(Number(v)))
+      return Number(v).toLocaleString("pt-BR");
+    return String(v);
+  };
+
   if (normalized) {
     const c = normalized.kpis.complaints;
+    const u = normalized.kpis.users;
+    const e = normalized.kpis.engagement;
+    const q = normalized.kpis.quality;
     const comp = normalized.comparison ?? ({} as Record<string, unknown>);
     const meta = normalized.meta ?? ({} as Record<string, unknown>);
 
     kpis = [
       {
         title: "Total de Denúncias",
-        value: c.total ?? 0,
+        value: formatNumber(c.total ?? 0),
         iconName: "bi-flag-fill",
         color: "primary-red",
         delta:
@@ -68,7 +81,7 @@ export default function DashboardClient() {
       },
       {
         title: "Resolvidas",
-        value: c.resolved ?? 0,
+        value: formatNumber(c.resolved ?? 0),
         iconName: "bi-check-circle-fill",
         color: "secondary-red",
         delta:
@@ -76,18 +89,66 @@ export default function DashboardClient() {
           undefined,
         trend: (c.growthRate?.trend as "up" | "down" | "stable") ?? "stable",
         sublabel: "",
+        // use resolution rate as visual progress (0-100)
+        progress:
+          typeof c.resolutionRate === "number"
+            ? Math.round(c.resolutionRate)
+            : null,
       },
       {
         title: "Pendentes",
-        value: c.pending ?? 0,
+        value: formatNumber(c.pending ?? 0),
         iconName: "bi-hourglass-split",
         color: "modern-gray",
       },
       {
         title: "Tempo Médio de Resolução",
-        value: c.averageResolutionTime ?? "-",
+        value:
+          c.averageResolutionTime == null
+            ? "-"
+            : `${c.averageResolutionTime} dias`,
         iconName: "bi-clock-fill",
         color: "soft-black",
+      },
+      // Users / engagement / quality KPIs
+      {
+        title: "Usuários Ativos",
+        value: formatNumber(u.active ?? 0),
+        iconName: "bi-people-fill",
+        color: "primary-red",
+        sublabel: "Usuários ativos nos últimos 30 dias",
+      },
+      {
+        title: "Novos Usuários",
+        value: formatNumber(u.new ?? 0),
+        iconName: "bi-person-plus",
+        color: "modern-gray",
+      },
+      {
+        title: "Denúncias / Usuário",
+        value:
+          typeof e.complaintsPerUser === "number"
+            ? e.complaintsPerUser.toFixed(2)
+            : formatNumber(e.complaintsPerUser ?? "—"),
+        iconName: "bi-bar-chart-line",
+        color: "soft-black",
+      },
+      {
+        title: "Índice de Completude",
+        value: `${Math.round(q.completenessScore ?? 0)}%`,
+        iconName: "bi-check2-square",
+        color: "secondary-red",
+        // visualize completeness as progress
+        progress:
+          typeof q.completenessScore === "number"
+            ? Math.round(q.completenessScore)
+            : null,
+      },
+      {
+        title: "Denúncias com Imagens",
+        value: formatNumber(q.complaintsWithImages ?? 0),
+        iconName: "bi-image-fill",
+        color: "modern-gray",
       },
     ];
   } else {
@@ -181,31 +242,49 @@ export default function DashboardClient() {
               </Button>
             </div>
           </div>
+        </div>
+      </section>
 
-          <div className="w-full lg:w-2/5">
-            <div className="grid grid-cols-2 gap-4">
-              {isLoading ? (
-                <div className="col-span-2">Carregando KPIs...</div>
-              ) : isError ? (
-                <div className="col-span-2 text-red-600">
-                  Erro ao carregar KPIs
-                </div>
-              ) : (
-                kpis.map((kpi) => (
-                  <KPICard
-                    key={kpi.title}
-                    title={kpi.title}
-                    value={kpi.value}
-                    iconName={kpi.iconName}
-                    color={kpi.color}
-                    delta={kpi.delta}
-                    trend={kpi.trend}
-                    sublabel={kpi.sublabel}
-                    lastUpdated={kpi.lastUpdated}
-                  />
-                ))
-              )}
+      {/* KPIs full-width responsive grid */}
+      <section className="mb-8">
+        <div className="container mx-auto px-4">
+          <div className="bg-white rounded-xl shadow-sm p-4">
+            <div className="text-sm text-gray-500 mb-3">
+              Principais Indicadores
             </div>
+            {/* Carousel compact single-line KPIs */}
+            {isLoading ? (
+              <div>Carregando KPIs...</div>
+            ) : isError ? (
+              <div className="text-red-600">Erro ao carregar KPIs</div>
+            ) : (
+              <div>
+                <Carousel
+                  itemMinWidth={220}
+                  autoplay
+                  interval={5000}
+                  pauseOnHover
+                  showControls={false}
+                  speedFactor={0.45}
+                >
+                  {kpis.map((kpi) => (
+                    <KPICard
+                      key={kpi.title}
+                      title={kpi.title}
+                      value={kpi.value}
+                      iconName={kpi.iconName}
+                      color={kpi.color}
+                      delta={kpi.delta}
+                      trend={kpi.trend}
+                      sublabel={kpi.sublabel}
+                      lastUpdated={kpi.lastUpdated}
+                      progress={kpi.progress ?? null}
+                      compact
+                    />
+                  ))}
+                </Carousel>
+              </div>
+            )}
           </div>
         </div>
       </section>
